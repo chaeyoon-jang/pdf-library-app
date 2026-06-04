@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>paper library</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<style>
+  :root{
+    --bg:#f5e9ea; --panel:#fffdfd; --border:#e8d8d9; --row:#f3e9ea;
+    --text:#403a3b; --muted:#a18f91; --ink:#322d2e;
+    --accent:#b97a84; --accent-soft:#f3e3e5;
+    --hl-yellow:#ffe066; --hl-green:#a8e6a1; --hl-pink:#ffb3c6; --hl-blue:#a5d8ff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:'Pretendard Variable',Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;background:var(--bg);color:var(--text);font-size:14px;letter-spacing:-.01em}
+  ::selection{background:#ecd2d6}
+  button{font-family:inherit;font-size:13px;cursor:pointer;border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:8px;padding:7px 14px;transition:all .15s}
+  button:hover{border-color:#cdb4b7;background:#faf3f4}
+  button.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+  button.primary:hover{background:#191617}
+  button.ghost{border-color:transparent;background:transparent;padding:4px 9px}
+  button.ghost:hover{background:var(--accent-soft)}
+  input,textarea{font-family:inherit;font-size:14px;border:1px solid var(--border);border-radius:8px;padding:9px 12px;background:#fff;color:var(--text);width:100%;transition:border-color .15s}
+  input:focus,textarea:focus{outline:none;border-color:var(--accent)}
+  input::placeholder,textarea::placeholder{color:#c5b3b5}
+  .screen{display:none;height:100vh;flex-direction:column}
+  .screen.active{display:flex}
+
+  /* ---------- setup ---------- */
+  #setupScreen{align-items:center;justify-content:center}
+  .setupCard{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:40px;width:432px;box-shadow:0 12px 44px rgba(120,80,85,.09)}
+  .setupCard h1{font-size:21px;font-weight:600;letter-spacing:.05em;margin-bottom:8px}
+  .setupCard p.sub{color:var(--muted);font-size:13px;margin-bottom:22px;line-height:1.7}
+  .setupCard label{display:block;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.08em;margin:16px 0 6px}
+  .setupCard .hint{font-size:12px;color:var(--muted);margin-top:18px;line-height:1.75}
+  .setupCard .hint a{color:var(--accent)}
+  #connectBtn{width:100%;margin-top:24px;padding:11px;border-radius:10px;font-size:14px}
+
+  /* ---------- table ---------- */
+  .topbar{display:flex;align-items:center;gap:12px;padding:16px 32px;background:var(--bg);border-bottom:1px solid var(--border)}
+  .topbar h1{font-size:16px;font-weight:600;letter-spacing:.07em;margin-right:8px}
+  .topbar .repoTag{font-size:11px;color:var(--muted);background:transparent;border:1px solid var(--border);border-radius:20px;padding:3px 12px;letter-spacing:.03em}
+  .topbar .spacer{flex:1}
+  #searchInput{width:250px;border-radius:20px;padding:8px 16px;font-size:13px}
+  #tableWrap{flex:1;overflow:auto;padding:28px 32px}
+  table{width:100%;border-collapse:separate;border-spacing:0;background:var(--panel);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 8px 32px rgba(120,80,85,.06)}
+  thead th{text-align:left;font-size:11px;font-weight:600;letter-spacing:.1em;color:var(--muted);padding:13px 18px;border-bottom:1px solid var(--border);background:#fbf5f6;position:sticky;top:0}
+  tbody td{padding:15px 18px;border-bottom:1px solid var(--row);vertical-align:top}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr{cursor:pointer;transition:background .12s}
+  tbody tr:hover{background:#fbf4f5}
+  td.titleCell{font-weight:600;max-width:280px}
+  td.titleCell .annCount{font-weight:400;font-size:11px;color:var(--accent);margin-left:6px}
+  td.summaryCell{color:#6d6364;max-width:340px;line-height:1.6}
+  td.bibCell{max-width:300px}
+  td.bibCell code{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}
+  td.actionCell{white-space:nowrap;text-align:right}
+  td.tagCell{max-width:200px}
+  .tagChip{display:inline-block;font-size:11px;color:#94606b;background:var(--accent-soft);border-radius:20px;padding:2px 10px;margin:0 4px 4px 0;cursor:pointer;transition:background .12s}
+  .tagChip:hover{background:#ecd2d6}
+  .emptyMsg{text-align:center;color:var(--muted);padding:64px 0;line-height:1.9}
+  .placeholder{color:#cdbcbe;font-weight:400}
+
+  /* ---------- viewer ---------- */
+  #viewerScreen{background:#ece0e1}
+  .vToolbar{display:flex;align-items:center;gap:10px;padding:10px 20px;background:var(--bg);border-bottom:1px solid var(--border);z-index:20}
+  .vToolbar .vTitle{font-weight:600;font-size:13.5px;max-width:38vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .vToolbar .spacer{flex:1}
+  #saveStatus{font-size:12px;color:var(--muted);min-width:60px;text-align:right}
+  #pageIndicator{font-size:12px;color:var(--muted)}
+  .vBody{flex:1;display:flex;overflow:hidden}
+  #viewerMain{flex:1;overflow:auto;padding:28px 0;position:relative}
+  .pageWrap{position:relative;margin:0 auto 20px;background:#fff;box-shadow:0 4px 26px rgba(80,50,55,.13);border-radius:2px}
+  .pageWrap canvas{display:block;position:absolute;top:0;left:0}
+  .hlLayer{position:absolute;inset:0}
+  .hlLayer .hl{position:absolute;mix-blend-mode:multiply;opacity:.55;border-radius:1px;pointer-events:auto;cursor:pointer}
+  .hlLayer .hl.flash{outline:2px solid var(--accent)}
+  .textLayer{position:absolute;inset:0;overflow:hidden;line-height:1;z-index:3;transform-origin:0 0;caret-color:CanvasText}
+  .textLayer span,.textLayer br{color:transparent;position:absolute;white-space:pre;cursor:text;transform-origin:0% 0%}
+  .textLayer ::selection{background:rgba(70,120,255,.35)}
+
+  /* sidebar */
+  #sidebar{width:300px;background:var(--panel);border-left:1px solid var(--border);overflow-y:auto;display:none}
+  #sidebar.open{display:block}
+  #sidebar .sbHead{padding:16px 18px;font-weight:600;font-size:12px;letter-spacing:.08em;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--panel)}
+  .sbItem{padding:14px 18px;border-bottom:1px solid var(--row);cursor:pointer}
+  .sbItem:hover{background:#fbf4f5}
+  .sbItem .sbMeta{display:flex;align-items:center;gap:6px;margin-bottom:5px}
+  .sbItem .dot{width:10px;height:10px;border-radius:50%;flex:none}
+  .sbItem .sbPage{font-size:11px;color:var(--muted)}
+  .sbItem .sbText{font-size:12.5px;color:#6d6364;line-height:1.55;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .sbItem .sbNote{margin-top:7px;font-size:12px;color:#94606b;background:var(--accent-soft);border-radius:8px;padding:6px 9px;line-height:1.55;white-space:pre-wrap}
+
+  /* selection popup & highlight popup */
+  .popup{position:fixed;z-index:100;background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 40px rgba(80,50,55,.16);display:none}
+  #selPopup{padding:8px 10px;display:none;gap:7px;align-items:center}
+  #selPopup.show{display:flex}
+  .swatch{width:24px;height:24px;border-radius:50%;border:1px solid rgba(0,0,0,.08);cursor:pointer;padding:0;transition:transform .1s}
+  .swatch:hover{transform:scale(1.15)}
+  #hlPopup{width:280px;padding:14px}
+  #hlPopup.show{display:block}
+  #hlPopup .row{display:flex;gap:7px;align-items:center;margin-bottom:10px}
+  #hlPopup textarea{min-height:70px;resize:vertical;font-size:13px}
+  #hlPopup .btns{display:flex;justify-content:space-between;margin-top:10px}
+  #hlPopup .delBtn{color:#b04848}
+
+  /* modal */
+  .modalBack{position:fixed;inset:0;background:rgba(60,45,48,.32);backdrop-filter:blur(3px);z-index:200;display:none;align-items:center;justify-content:center}
+  .modalBack.show{display:flex}
+  .modal{background:var(--panel);border-radius:18px;padding:30px;width:560px;max-width:92vw;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(40,25,28,.22)}
+  .modal h2{font-size:16px;font-weight:600;margin-bottom:18px}
+  .modal label{display:block;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.08em;margin:14px 0 5px}
+  .modal textarea#mBibtex{font-family:ui-monospace,Menlo,monospace;font-size:12px;min-height:140px}
+  .modal .btns{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+
+  /* toast & spinner */
+  #toastBox{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:500;display:flex;flex-direction:column;gap:8px;align-items:center}
+  .toast{background:#393334;color:#fff;padding:9px 20px;border-radius:20px;font-size:13px;animation:fadein .2s}
+  .toast.err{background:#a84a4a}
+  @keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1}}
+  .spinner{border:3px solid #e0d2d3;border-top-color:#8d6b70;border-radius:50%;width:28px;height:28px;animation:spin .8s linear infinite;margin:80px auto}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #viewerLoading{color:#8d6b70;text-align:center;padding-top:60px}
+</style>
+</head>
+<body>
+
+<!-- ============ SETUP ============ -->
+<div id="setupScreen" class="screen">
+  <div class="setupCard">
+    <h1>paper library</h1>
+    <p class="sub">GitHub private 저장소를 백엔드로 쓰는 논문 관리 도구.<br>어느 컴퓨터에서든 이 페이지를 열고 연결하면 같은 라이브러리를 보게 됩니다.</p>
+    <label>GitHub 사용자명 (owner)</label>
+    <input id="cfgOwner" placeholder="예: wkdcodbs9911">
+    <label>저장소 이름 (repo)</label>
+    <input id="cfgRepo" placeholder="예: paper-library">
+    <label>Personal Access Token</label>
+    <input id="cfgToken" type="password" placeholder="github_pat_...">
+    <button id="connectBtn" class="primary">연결</button>
+    <p class="hint">
+      ① github.com에서 <b>private 저장소</b>를 하나 만드세요.<br>
+      ② <a href="https://github.com/settings/personal-access-tokens/new" target="_blank">Fine-grained token 발급</a> — 해당 저장소만 선택, 권한은 <b>Contents: Read and write</b>만.<br>
+      ③ 토큰은 이 브라우저의 localStorage에만 저장됩니다.
+    </p>
+  </div>
+</div>
+
+<!-- ============ TABLE ============ -->
+<div id="tableScreen" class="screen">
+  <div class="topbar">
+    <h1>paper library</h1>
+    <span class="repoTag" id="repoTag"></span>
+    <div class="spacer"></div>
+    <input id="searchInput" placeholder="태그 · 제목 검색">
+    <button id="addBtn" class="primary">＋ PDF 추가</button>
+    <button id="refreshBtn" title="새로고침">⟳</button>
+    <button id="settingsBtn" title="연결 설정">⚙</button>
+    <input type="file" id="fileInput" accept="application/pdf" multiple style="display:none">
+  </div>
+  <div id="tableWrap">
+    <table>
+      <thead><tr>
+        <th style="width:26%">문서 제목</th>
+        <th style="width:28%">한줄 요약</th>
+        <th style="width:17%">태그</th>
+        <th style="width:19%">BibTeX</th>
+        <th style="width:10%"></th>
+      </tr></thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div id="emptyMsg" class="emptyMsg" style="display:none">아직 문서가 없습니다.<br>「＋ PDF 추가」로 첫 논문을 올려보세요.</div>
+  </div>
+</div>
+
+<!-- ============ VIEWER ============ -->
+<div id="viewerScreen" class="screen">
+  <div class="vToolbar">
+    <button id="backBtn">← 목록</button>
+    <span class="vTitle" id="vTitle"></span>
+    <div class="spacer"></div>
+    <span id="pageIndicator"></span>
+    <button id="zoomOut" class="ghost">−</button>
+    <button id="zoomIn" class="ghost">＋</button>
+    <span id="saveStatus"></span>
+    <button id="sidebarBtn">메모 목록</button>
+  </div>
+  <div class="vBody">
+    <div id="viewerMain">
+      <div id="viewerLoading"><div class="spinner"></div>불러오는 중…</div>
+      <div id="pagesContainer"></div>
+    </div>
+    <div id="sidebar">
+      <div class="sbHead">형광펜 · 메모</div>
+      <div id="sbList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- selection popup -->
+<div id="selPopup" class="popup"></div>
+
+<!-- highlight edit popup -->
+<div id="hlPopup" class="popup">
+  <div class="row" id="hlColors"></div>
+  <textarea id="hlNote" placeholder="메모를 입력하세요…"></textarea>
+  <div class="btns">
+    <button class="ghost delBtn" id="hlDelete">삭제</button>
+    <button class="primary" id="hlClose">완료</button>
+  </div>
+</div>
+
+<!-- edit modal -->
+<div class="modalBack" id="modalBack">
+  <div class="modal">
+    <h2>문서 정보 편집</h2>
+    <label>문서 제목</label>
+    <input id="mTitle">
+    <label>한줄 요약</label>
+    <input id="mSummary" placeholder="이 논문의 핵심 기여를 한 줄로">
+    <label>키워드 태그 (쉼표로 구분)</label>
+    <input id="mTags" placeholder="예: RL, long-context, reasoning">
+    <label>BibTeX</label>
+    <textarea id="mBibtex" placeholder="@article{...}"></textarea>
+    <div class="btns">
+      <button id="mCancel">취소</button>
+      <button id="mSave" class="primary">저장</button>
+    </div>
+  </div>
+</div>
+
+<div id="toastBox"></div>
+
+<script>
+/* =====================================================================
+   PDF Library — single-file app, GitHub repo as backend.
+   Data layout in repo:
+     library.json            {papers:[{id,title,summary,bibtex,file,added}]}
+     papers/<id>.pdf
+     annotations/<id>.json   {highlights:[{id,color,text,note,created,regions:[{page,rects:[[x,y,w,h]..]}]}]}
+   All rects are stored as fractions of page width/height → zoom independent.
+   ===================================================================== */
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const $ = s => document.querySelector(s);
+const COLORS = [
+  getComputedStyle(document.documentElement).getPropertyValue('--hl-yellow').trim() || '#ffe066',
+  '#a8e6a1', '#ffb3c6', '#a5d8ff'
+];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+function toast(msg, isErr) {
+  const t = document.createElement('div');
+  t.className = 'toast' + (isErr ? ' err' : '');
+  t.textContent = msg;
+  $('#toastBox').appendChild(t);
+  setTimeout(() => t.remove(), isErr ? 5000 : 2600);
+}
+
+/* ---------- base64 helpers ---------- */
+function bufToB64(buf) {
+  const bytes = new Uint8Array(buf); let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+const strToB64 = s => bufToB64(new TextEncoder().encode(s));
+function b64ToStr(b64) {
+  const bin = atob(b64.replace(/\s/g, ''));
+  const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+/* ---------- GitHub API ---------- */
+let cfg = null;
+try { cfg = JSON.parse(localStorage.getItem('pdflib.cfg') || 'null'); } catch (e) {}
+
+async function gh(path, opts = {}, accept) {
+  const base = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}`;
+  const res = await fetch(path ? `${base}/${path}` : base, {
+    cache: 'no-store',
+    ...opts,
+    headers: {
+      'Authorization': `Bearer ${cfg.token}`,
+      'Accept': accept || 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      ...(opts.headers || {})
+    }
+  });
+  return res;
+}
+async function ghGetJsonFile(path) {           // → {data, sha} | null
+  const res = await gh(`contents/${path}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`GitHub ${res.status}: ${path}`);
+  const j = await res.json();
+  return { data: JSON.parse(b64ToStr(j.content)), sha: j.sha };
+}
+async function ghGetRaw(path) {                // → ArrayBuffer (files >1MB OK)
+  const res = await gh(`contents/${path}`, {}, 'application/vnd.github.raw+json');
+  if (!res.ok) throw new Error(`GitHub ${res.status}: ${path}`);
+  return res.arrayBuffer();
+}
+async function ghPut(path, b64content, sha, message) { // → new sha
+  const body = { message, content: b64content };
+  if (sha) body.sha = sha;
+  const res = await gh(`contents/${path}`, { method: 'PUT', body: JSON.stringify(body) });
+  if (res.status === 409 || res.status === 422) throw Object.assign(new Error('conflict'), { conflict: true });
+  if (!res.ok) throw new Error(`GitHub PUT ${res.status}: ${path}`);
+  return (await res.json()).content.sha;
+}
+async function ghDelete(path, sha, message) {
+  const res = await gh(`contents/${path}`, { method: 'DELETE', body: JSON.stringify({ message, sha }) });
+  if (!res.ok && res.status !== 404) throw new Error(`GitHub DELETE ${res.status}: ${path}`);
+}
+async function ghFileSha(path) {               // sha via directory listing (works for big files)
+  const dir = path.split('/').slice(0, -1).join('/');
+  const res = await gh(`contents/${dir}`);
+  if (!res.ok) return null;
+  const list = await res.json();
+  const f = Array.isArray(list) ? list.find(x => x.path === path) : null;
+  return f ? f.sha : null;
+}
+
+/* ---------- library state ---------- */
+let library = { papers: [] };
+let librarySha = null;
+
+async function loadLibrary() {
+  const got = await ghGetJsonFile('library.json');
+  if (got) { library = got.data; librarySha = got.sha; }
+  else {
+    library = { papers: [] };
+    librarySha = await ghPut('library.json', strToB64(JSON.stringify(library, null, 2)), null, 'init library');
+  }
+}
+async function saveLibrary() {
+  const payload = () => strToB64(JSON.stringify(library, null, 2));
+  try {
+    librarySha = await ghPut('library.json', payload(), librarySha, 'update library');
+  } catch (e) {
+    if (!e.conflict) throw e;
+    // another device updated meanwhile → merge by id (local edits win, remote-only kept)
+    const remote = await ghGetJsonFile('library.json');
+    if (remote) {
+      const localIds = new Set(library.papers.map(p => p.id));
+      for (const rp of remote.data.papers) if (!localIds.has(rp.id)) library.papers.push(rp);
+      librarySha = remote.sha;
+    }
+    librarySha = await ghPut('library.json', payload(), librarySha, 'update library (merged)');
+  }
+}
+
+/* ---------- screens ---------- */
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $(id).classList.add('active');
+}
+
+/* ---------- setup ---------- */
+$('#connectBtn').onclick = async () => {
+  const owner = $('#cfgOwner').value.trim(), repo = $('#cfgRepo').value.trim(), token = $('#cfgToken').value.trim();
+  if (!owner || !repo || !token) return toast('모든 항목을 입력하세요', true);
+  cfg = { owner, repo, token };
+  $('#connectBtn').textContent = '연결 중…';
+  try {
+    const res = await gh('');
+    if (res.status === 401) throw new Error('토큰이 유효하지 않습니다');
+    if (res.status === 404) throw new Error('저장소를 찾을 수 없습니다 (이름/토큰 권한 확인)');
+    if (!res.ok) throw new Error(`GitHub 오류 ${res.status}`);
+    localStorage.setItem('pdflib.cfg', JSON.stringify(cfg));
+    await enterLibrary();
+  } catch (e) {
+    cfg = null;
+    toast(e.message, true);
+  } finally { $('#connectBtn').textContent = '연결'; }
+};
+$('#settingsBtn').onclick = () => {
+  $('#cfgOwner').value = cfg?.owner || '';
+  $('#cfgRepo').value = cfg?.repo || '';
+  $('#cfgToken').value = cfg?.token || '';
+  showScreen('#setupScreen');
+};
+
+async function enterLibrary() {
+  await loadLibrary();
+  $('#repoTag').textContent = `${cfg.owner}/${cfg.repo}`;
+  renderTable();
+  showScreen('#tableScreen');
+}
+
+/* ---------- table ---------- */
+function renderTable() {
+  const q = $('#searchInput').value.trim().toLowerCase();
+  const rows = library.papers.filter(p => {
+    if (!q) return true;
+    const tags = (p.tags || []).map(t => t.toLowerCase());
+    return tags.some(t => t.includes(q)) || (p.title || '').toLowerCase().includes(q);
+  });
+  const tb = $('#tableBody');
+  tb.innerHTML = rows.map(p => `
+    <tr data-id="${p.id}">
+      <td class="titleCell">${esc(p.title)}</td>
+      <td class="summaryCell">${p.summary ? esc(p.summary) : '<span class="placeholder">요약 없음 — ✎로 입력</span>'}</td>
+      <td class="tagCell">${(p.tags && p.tags.length)
+        ? p.tags.map(t => `<span class="tagChip" data-tag="${esc(t)}">${esc(t)}</span>`).join('')
+        : '<span class="placeholder">—</span>'}</td>
+      <td class="bibCell">${p.bibtex
+        ? `<code title="${esc(p.bibtex)}">${esc(p.bibtex.split('\n')[0])}</code>`
+        : '<span class="placeholder">bibtex 없음</span>'}</td>
+      <td class="actionCell">
+        ${p.bibtex ? `<button class="ghost copyBib" title="bibtex 복사">⧉</button>` : ''}
+        <button class="ghost editRow" title="편집">✎</button>
+        <button class="ghost delRow" title="삭제">🗑</button>
+      </td>
+    </tr>`).join('');
+  $('#emptyMsg').style.display = rows.length ? 'none' : 'block';
+}
+$('#searchInput').oninput = renderTable;
+$('#refreshBtn').onclick = async () => { await loadLibrary(); renderTable(); toast('새로고침 완료'); };
+
+$('#tableBody').addEventListener('click', async e => {
+  const chip = e.target.closest('.tagChip');
+  if (chip) {                       // click tag → filter by it
+    $('#searchInput').value = chip.dataset.tag;
+    renderTable();
+    return;
+  }
+  const tr = e.target.closest('tr'); if (!tr) return;
+  const paper = library.papers.find(p => p.id === tr.dataset.id); if (!paper) return;
+  if (e.target.closest('.copyBib')) {
+    await navigator.clipboard.writeText(paper.bibtex);
+    return toast('BibTeX 복사됨');
+  }
+  if (e.target.closest('.editRow')) return openEditModal(paper);
+  if (e.target.closest('.delRow')) return deletePaper(paper);
+  openViewer(paper);
+});
+
+/* ---------- add pdf ---------- */
+$('#addBtn').onclick = () => $('#fileInput').click();
+$('#fileInput').onchange = async e => {
+  const files = [...e.target.files]; e.target.value = '';
+  for (const f of files) {
+    const id = uid();
+    toast(`업로드 중: ${f.name}`);
+    try {
+      const buf = await f.arrayBuffer();
+      await ghPut(`papers/${id}.pdf`, bufToB64(buf), null, `add ${f.name}`);
+      library.papers.unshift({
+        id, title: f.name.replace(/\.pdf$/i, ''), summary: '', bibtex: '', tags: [],
+        file: `papers/${id}.pdf`, added: new Date().toISOString()
+      });
+      await saveLibrary();
+      renderTable();
+      toast(`완료: ${f.name}`);
+    } catch (err) { toast(`업로드 실패: ${err.message}`, true); }
+  }
+};
+
+/* ---------- edit modal ---------- */
+let editingPaper = null;
+function openEditModal(p) {
+  editingPaper = p;
+  $('#mTitle').value = p.title || '';
+  $('#mSummary').value = p.summary || '';
+  $('#mTags').value = (p.tags || []).join(', ');
+  $('#mBibtex').value = p.bibtex || '';
+  $('#modalBack').classList.add('show');
+}
+$('#mCancel').onclick = () => $('#modalBack').classList.remove('show');
+$('#mSave').onclick = async () => {
+  editingPaper.title = $('#mTitle').value.trim();
+  editingPaper.summary = $('#mSummary').value.trim();
+  editingPaper.tags = $('#mTags').value.split(',').map(t => t.trim()).filter(Boolean);
+  editingPaper.bibtex = $('#mBibtex').value.trim();
+  $('#modalBack').classList.remove('show');
+  renderTable();
+  try { await saveLibrary(); toast('저장됨'); }
+  catch (e) { toast(`저장 실패: ${e.message}`, true); }
+};
+
+async function deletePaper(p) {
+  if (!confirm(`"${p.title}" 문서와 모든 형광펜/메모를 삭제할까요?`)) return;
+  try {
+    const pdfSha = await ghFileSha(p.file);
+    if (pdfSha) await ghDelete(p.file, pdfSha, `delete ${p.title}`);
+    const annSha = await ghFileSha(`annotations/${p.id}.json`);
+    if (annSha) await ghDelete(`annotations/${p.id}.json`, annSha, `delete annotations of ${p.title}`);
+    library.papers = library.papers.filter(x => x.id !== p.id);
+    await saveLibrary();
+    renderTable();
+    toast('삭제됨');
+  } catch (e) { toast(`삭제 실패: ${e.message}`, true); }
+}
+
+/* =====================================================================
+   VIEWER
+   ===================================================================== */
+const V = {                      // viewer state
+  paper: null, pdf: null, pages: [], baseSizes: [], wraps: [],
+  scale: 1, anns: { highlights: [] }, annSha: null, observer: null,
+  saveTimer: null, dirty: false
+};
+
+async function openViewer(paper) {
+  V.paper = paper; V.scale = 1; V.anns = { highlights: [] }; V.annSha = null;
+  V.pages = []; V.baseSizes = []; V.wraps = []; V.dirty = false;
+  $('#vTitle').textContent = paper.title;
+  $('#pagesContainer').innerHTML = '';
+  $('#viewerLoading').style.display = 'block';
+  $('#saveStatus').textContent = '';
+  $('#sbList').innerHTML = '';
+  showScreen('#viewerScreen');
+  try {
+    const [buf, ann] = await Promise.all([
+      ghGetRaw(paper.file),
+      ghGetJsonFile(`annotations/${paper.id}.json`)
+    ]);
+    if (ann) { V.anns = ann.data; V.annSha = ann.sha; }
+    V.pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    await buildPages();
+    renderSidebar();
+  } catch (e) {
+    toast(`열기 실패: ${e.message}`, true);
+    showScreen('#tableScreen');
+  } finally { $('#viewerLoading').style.display = 'none'; }
+}
+
+async function buildPages() {
+  const cont = $('#pagesContainer');
+  cont.innerHTML = '';
+  const n = V.pdf.numPages;
+  $('#pageIndicator').textContent = `${n} pages`;
+  // collect base sizes
+  for (let i = 1; i <= n; i++) {
+    const page = await V.pdf.getPage(i);
+    V.pages[i] = page;
+    const vp = page.getViewport({ scale: 1 });
+    V.baseSizes[i] = { w: vp.width, h: vp.height };
+  }
+  // initial scale: fit width
+  const avail = $('#viewerMain').clientWidth - 48;
+  V.scale = Math.min(1.6, Math.max(0.6, avail / V.baseSizes[1].w));
+  // wraps
+  for (let i = 1; i <= n; i++) {
+    const wrap = document.createElement('div');
+    wrap.className = 'pageWrap';
+    wrap.dataset.page = i;
+    cont.appendChild(wrap);
+    V.wraps[i] = wrap;
+  }
+  layoutPages();
+  V.observer && V.observer.disconnect();
+  V.observer = new IntersectionObserver(entries => {
+    for (const en of entries) if (en.isIntersecting) renderPage(+en.target.dataset.page);
+  }, { root: $('#viewerMain'), rootMargin: '600px 0px' });
+  V.wraps.forEach(w => w && V.observer.observe(w));
+}
+
+function layoutPages() {
+  for (let i = 1; i < V.wraps.length; i++) {
+    const w = V.wraps[i]; if (!w) continue;
+    w.style.width = (V.baseSizes[i].w * V.scale) + 'px';
+    w.style.height = (V.baseSizes[i].h * V.scale) + 'px';
+    w.dataset.rendered = '';            // force re-render at new scale
+    w.innerHTML = '';
+  }
+}
+
+async function renderPage(i) {
+  const wrap = V.wraps[i];
+  const key = 's' + V.scale.toFixed(3);
+  if (wrap.dataset.rendered === key || wrap.dataset.rendering === key) return;
+  wrap.dataset.rendering = key;
+  const page = V.pages[i];
+  const viewport = page.getViewport({ scale: V.scale });
+  const dpr = window.devicePixelRatio || 1;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.floor(viewport.width * dpr);
+  canvas.height = Math.floor(viewport.height * dpr);
+  canvas.style.width = viewport.width + 'px';
+  canvas.style.height = viewport.height + 'px';
+  await page.render({
+    canvasContext: canvas.getContext('2d'),
+    viewport, transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null
+  }).promise;
+  if (wrap.dataset.rendering !== key) return;   // zoom changed mid-render
+
+  const hlLayer = document.createElement('div');
+  hlLayer.className = 'hlLayer';
+
+  const textLayer = document.createElement('div');
+  textLayer.className = 'textLayer';
+  textLayer.style.setProperty('--scale-factor', viewport.scale);
+  textLayer.style.width = viewport.width + 'px';
+  textLayer.style.height = viewport.height + 'px';
+
+  wrap.innerHTML = '';
+  wrap.appendChild(canvas);
+  wrap.appendChild(hlLayer);
+  wrap.appendChild(textLayer);
+
+  const textContent = await page.getTextContent();
+  await pdfjsLib.renderTextLayer({
+    textContentSource: textContent, container: textLayer, viewport, textDivs: []
+  }).promise;
+
+  paintHighlights(i);
+  wrap.dataset.rendered = key;
+  delete wrap.dataset.rendering;
+}
+
+function paintHighlights(pageNo) {
+  const wrap = V.wraps[pageNo]; if (!wrap) return;
+  const layer = wrap.querySelector('.hlLayer'); if (!layer) return;
+  layer.innerHTML = '';
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  for (const hl of V.anns.highlights) {
+    for (const reg of hl.regions) {
+      if (reg.page !== pageNo) continue;
+      for (const [x, y, w, h] of reg.rects) {
+        const d = document.createElement('div');
+        d.className = 'hl';
+        d.dataset.id = hl.id;
+        d.style.cssText = `left:${x*W}px;top:${y*H}px;width:${w*W}px;height:${h*H}px;background:${hl.color}`;
+        d.title = hl.note || '';
+        layer.appendChild(d);
+      }
+    }
+  }
+}
+function repaintAll() {
+  for (let i = 1; i < V.wraps.length; i++)
+    if (V.wraps[i] && V.wraps[i].dataset.rendered) paintHighlights(i);
+}
+
+/* ---------- zoom ---------- */
+function setZoom(f) {
+  V.scale = Math.min(3, Math.max(0.4, V.scale * f));
+  layoutPages();
+  // re-render whatever is near the viewport
+  V.observer.disconnect();
+  V.wraps.forEach(w => w && V.observer.observe(w));
+}
+$('#zoomIn').onclick = () => setZoom(1.2);
+$('#zoomOut').onclick = () => setZoom(1/1.2);
+
+/* ---------- selection → highlight ---------- */
+const selPopup = $('#selPopup');
+selPopup.innerHTML = COLORS.map(c =>
+  `<button class="swatch" data-color="${c}" style="background:${c}"></button>`).join('');
+selPopup.addEventListener('mousedown', e => e.preventDefault());  // keep selection alive
+
+document.addEventListener('mouseup', e => {
+  if (!$('#viewerScreen').classList.contains('active')) return;
+  if (e.target.closest('#selPopup') || e.target.closest('#hlPopup')) return;
+  setTimeout(() => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.toString().trim()) { selPopup.classList.remove('show'); return; }
+    const anchor = sel.anchorNode && sel.anchorNode.parentElement;
+    if (!anchor || !anchor.closest('.textLayer')) { selPopup.classList.remove('show'); return; }
+    const r = sel.getRangeAt(0).getBoundingClientRect();
+    selPopup.classList.add('show');
+    const pw = selPopup.offsetWidth || 140;
+    selPopup.style.left = Math.max(8, Math.min(window.innerWidth - pw - 8, r.left + r.width/2 - pw/2)) + 'px';
+    selPopup.style.top = Math.max(8, r.top - 44) + 'px';
+  }, 0);
+});
+
+selPopup.addEventListener('click', e => {
+  const btn = e.target.closest('.swatch'); if (!btn) return;
+  createHighlightFromSelection(btn.dataset.color);
+});
+
+function createHighlightFromSelection(color) {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed) return;
+  const text = sel.toString().trim();
+  const rects = [...sel.getRangeAt(0).getClientRects()];
+  const regions = [];
+  for (let i = 1; i < V.wraps.length; i++) {
+    const wrap = V.wraps[i]; if (!wrap) continue;
+    const pr = wrap.getBoundingClientRect();
+    const inPage = [];
+    for (const r of rects) {
+      if (r.width < 1 || r.height < 1) continue;
+      const cx = r.left + r.width/2, cy = r.top + r.height/2;
+      if (cx < pr.left || cx > pr.right || cy < pr.top || cy > pr.bottom) continue;
+      const nr = [
+        +((r.left - pr.left)/pr.width).toFixed(5),
+        +((r.top - pr.top)/pr.height).toFixed(5),
+        +(r.width/pr.width).toFixed(5),
+        +(r.height/pr.height).toFixed(5)
+      ];
+      // skip rects ~contained in an already-kept rect (browsers emit duplicates)
+      if (!inPage.some(k => k[0] <= nr[0]+0.002 && k[1] <= nr[1]+0.002 &&
+                            k[0]+k[2] >= nr[0]+nr[2]-0.002 && k[1]+k[3] >= nr[1]+nr[3]-0.002))
+        inPage.push(nr);
+    }
+    if (inPage.length) regions.push({ page: i, rects: inPage });
+  }
+  if (!regions.length) return;
+  const hl = { id: uid(), color, text, note: '', created: new Date().toISOString(), regions };
+  V.anns.highlights.push(hl);
+  sel.removeAllRanges();
+  selPopup.classList.remove('show');
+  repaintAll();
+  renderSidebar();
+  scheduleSave();
+  // open memo popup anchored to first rect
+  const first = regions[0], wrap = V.wraps[first.page], pr = wrap.getBoundingClientRect();
+  const [x, y, w, h] = first.rects[0];
+  openHlPopup(hl.id, { left: pr.left + x*pr.width, bottom: pr.top + (y+h)*pr.height });
+}
+
+/* ---------- highlight popup ---------- */
+const hlPopup = $('#hlPopup');
+let activeHl = null;
+$('#hlColors').innerHTML = COLORS.map(c =>
+  `<button class="swatch" data-color="${c}" style="background:${c}"></button>`).join('');
+
+function openHlPopup(id, anchor) {
+  activeHl = V.anns.highlights.find(h => h.id === id);
+  if (!activeHl) return;
+  $('#hlNote').value = activeHl.note || '';
+  hlPopup.classList.add('show');
+  const pw = 280, ph = hlPopup.offsetHeight || 190;
+  let left = Math.max(8, Math.min(window.innerWidth - pw - 8, anchor.left));
+  let top = anchor.bottom + 8;
+  if (top + ph > window.innerHeight - 8) top = Math.max(8, anchor.bottom - ph - 30);
+  hlPopup.style.left = left + 'px';
+  hlPopup.style.top = top + 'px';
+  $('#hlNote').focus();
+}
+$('#pagesContainer').addEventListener('click', e => {
+  // ignore clicks that end a text-selection drag
+  const sel = window.getSelection();
+  if (sel && !sel.isCollapsed && sel.toString().trim()) return;
+  // direct hit on a .hl element (uncovered part)
+  const el = e.target.closest('.hl');
+  if (el) {
+    const r = el.getBoundingClientRect();
+    return openHlPopup(el.dataset.id, { left: r.left, bottom: r.bottom });
+  }
+  // otherwise hit-test stored rects — the text layer sits above the
+  // highlight layer, so clicks on highlighted text land on text spans
+  const wrap = e.target.closest('.pageWrap');
+  if (!wrap) return;
+  const pr = wrap.getBoundingClientRect();
+  const x = (e.clientX - pr.left) / pr.width;
+  const y = (e.clientY - pr.top) / pr.height;
+  const pageNo = +wrap.dataset.page;
+  for (const hl of V.anns.highlights)
+    for (const reg of hl.regions) {
+      if (reg.page !== pageNo) continue;
+      for (const [rx, ry, rw, rh] of reg.rects)
+        if (x >= rx && x <= rx + rw && y >= ry && y <= ry + rh)
+          return openHlPopup(hl.id, { left: e.clientX - 20, bottom: e.clientY + 6 });
+    }
+});
+$('#hlColors').addEventListener('click', e => {
+  const btn = e.target.closest('.swatch'); if (!btn || !activeHl) return;
+  activeHl.color = btn.dataset.color;
+  repaintAll(); renderSidebar(); scheduleSave();
+});
+$('#hlNote').addEventListener('input', () => {
+  if (!activeHl) return;
+  activeHl.note = $('#hlNote').value;
+  scheduleSave();
+});
+$('#hlNote').addEventListener('blur', renderSidebar);
+$('#hlClose').onclick = () => { hlPopup.classList.remove('show'); activeHl = null; renderSidebar(); };
+$('#hlDelete').onclick = () => {
+  if (!activeHl) return;
+  V.anns.highlights = V.anns.highlights.filter(h => h.id !== activeHl.id);
+  hlPopup.classList.remove('show'); activeHl = null;
+  repaintAll(); renderSidebar(); scheduleSave();
+};
+document.addEventListener('mousedown', e => {
+  if (hlPopup.classList.contains('show') &&
+      !e.target.closest('#hlPopup') && !e.target.closest('.hl')) {
+    hlPopup.classList.remove('show'); activeHl = null; renderSidebar();
+  }
+});
+
+/* ---------- sidebar ---------- */
+$('#sidebarBtn').onclick = () => $('#sidebar').classList.toggle('open');
+function renderSidebar() {
+  const sorted = [...V.anns.highlights].sort((a, b) => {
+    const pa = a.regions[0], pb = b.regions[0];
+    return pa.page - pb.page || pa.rects[0][1] - pb.rects[0][1];
+  });
+  $('#sbList').innerHTML = sorted.length ? sorted.map(h => `
+    <div class="sbItem" data-id="${h.id}">
+      <div class="sbMeta"><span class="dot" style="background:${h.color}"></span>
+        <span class="sbPage">p.${h.regions[0].page}</span></div>
+      <div class="sbText">${esc(h.text)}</div>
+      ${h.note ? `<div class="sbNote">${esc(h.note)}</div>` : ''}
+    </div>`).join('')
+    : '<div style="padding:20px;color:var(--muted);font-size:13px;line-height:1.7">텍스트를 드래그하면 형광펜 색상 선택이 나타납니다.<br>형광펜을 클릭하면 메모를 달 수 있어요.</div>';
+}
+$('#sbList').addEventListener('click', e => {
+  const item = e.target.closest('.sbItem'); if (!item) return;
+  const hl = V.anns.highlights.find(h => h.id === item.dataset.id); if (!hl) return;
+  const wrap = V.wraps[hl.regions[0].page];
+  wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setTimeout(() => {
+    wrap.querySelectorAll(`.hl[data-id="${hl.id}"]`).forEach(el => {
+      el.classList.add('flash');
+      setTimeout(() => el.classList.remove('flash'), 1600);
+    });
+  }, 400);
+});
+
+/* ---------- annotation persistence ---------- */
+function scheduleSave() {
+  V.dirty = true;
+  $('#saveStatus').textContent = '저장 대기…';
+  clearTimeout(V.saveTimer);
+  V.saveTimer = setTimeout(saveAnnotations, 1200);
+}
+async function saveAnnotations() {
+  if (!V.paper) return;
+  V.dirty = false;
+  $('#saveStatus').textContent = '저장 중…';
+  const path = `annotations/${V.paper.id}.json`;
+  const b64 = strToB64(JSON.stringify(V.anns, null, 2));
+  try {
+    V.annSha = await ghPut(path, b64, V.annSha, `annotate ${V.paper.title}`);
+    $('#saveStatus').textContent = V.dirty ? '저장 대기…' : '저장됨 ✓';
+  } catch (e) {
+    if (e.conflict) {   // refetch sha, last write wins
+      try {
+        const remote = await ghGetJsonFile(path);
+        V.annSha = remote ? remote.sha : null;
+        V.annSha = await ghPut(path, b64, V.annSha, `annotate ${V.paper.title}`);
+        $('#saveStatus').textContent = '저장됨 ✓';
+        return;
+      } catch (e2) { e = e2; }
+    }
+    $('#saveStatus').textContent = '저장 실패!';
+    toast(`어노테이션 저장 실패: ${e.message}`, true);
+  }
+}
+
+$('#backBtn').onclick = async () => {
+  clearTimeout(V.saveTimer);
+  if (V.dirty) await saveAnnotations();
+  V.pdf && V.pdf.destroy();
+  V.pdf = null; V.paper = null;
+  V.observer && V.observer.disconnect();
+  showScreen('#tableScreen');
+};
+window.addEventListener('beforeunload', e => {
+  if (V.dirty) { saveAnnotations(); e.preventDefault(); e.returnValue = ''; }
+});
+
+/* ---------- boot ---------- */
+(async () => {
+  if (cfg && cfg.token) {
+    try { await enterLibrary(); return; } catch (e) { toast(`연결 실패: ${e.message}`, true); }
+  }
+  showScreen('#setupScreen');
+})();
+</script>
+</body>
+</html>
