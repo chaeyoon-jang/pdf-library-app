@@ -5,13 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>paper library</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
 <style>
   :root{
     --bg:#ebf1f5; --panel:#fbf6ef; --border:#d4c8b4; --row:#ecf2f5;
     --text:#3d342a; --muted:#9c8e7c; --ink:#2a221a;
     --accent:#7a9aae; --accent-soft:#dce6ec;
-    --hl-yellow:#ffe066; --hl-green:#a8e6a1; --hl-pink:#ffb3c6; --hl-blue:#a5d8ff;
+    --hl-cream:#fce8c4; --hl-latte:#ead2b0; --hl-caramel:#e6c098; --hl-mocha:#d4ad8c;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
@@ -82,6 +86,34 @@
   .textLayer span,.textLayer br{color:transparent;position:absolute;white-space:pre;cursor:text;transform-origin:0% 0%}
   .textLayer ::selection{background:rgba(122,154,174,.38)}
 
+  /* post-its */
+  .psLayer{position:absolute;inset:0;pointer-events:none;z-index:4}
+  .postit{position:absolute;width:26px;height:26px;border-radius:3px;box-shadow:0 4px 12px rgba(70,55,35,.22),inset -4px -4px 0 rgba(70,55,35,.07);cursor:pointer;pointer-events:auto;transition:transform .14s;transform:translate(-13px,-13px)}
+  .postit::after{content:'';position:absolute;left:5px;right:5px;top:6px;bottom:6px;background:repeating-linear-gradient(to bottom,rgba(70,55,35,.3) 0 1.5px,transparent 1.5px 5px)}
+  .postit:hover{transform:translate(-13px,-13px) scale(1.2) rotate(-4deg)}
+  .postit.flash{outline:2px solid var(--accent);outline-offset:2px}
+  body.postitMode #pagesContainer .pageWrap{cursor:crosshair}
+  body.postitMode .textLayer{pointer-events:none;user-select:none}
+  #postitBtn.active{background:var(--ink);border-color:var(--ink);color:#fff}
+
+  /* markdown body (preview + sidebar) */
+  .mdBody{font-size:13px;color:var(--text);line-height:1.65;word-wrap:break-word;overflow-wrap:break-word}
+  .mdBody>*:first-child{margin-top:0}
+  .mdBody>*:last-child{margin-bottom:0}
+  .mdBody p{margin:.45em 0}
+  .mdBody h1,.mdBody h2,.mdBody h3,.mdBody h4{font-weight:600;margin:.7em 0 .3em;line-height:1.3}
+  .mdBody h1{font-size:15px} .mdBody h2{font-size:14px} .mdBody h3,.mdBody h4{font-size:13px}
+  .mdBody ul,.mdBody ol{padding-left:1.4em;margin:.4em 0}
+  .mdBody li{margin:.15em 0}
+  .mdBody code{background:#efe5d2;border-radius:3px;padding:1px 5px;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  .mdBody pre{background:#efe5d2;border-radius:6px;padding:8px 10px;overflow-x:auto;font-size:12px;margin:.45em 0}
+  .mdBody pre code{background:transparent;padding:0}
+  .mdBody blockquote{border-left:3px solid var(--border);padding-left:.8em;color:var(--muted);margin:.45em 0}
+  .mdBody a{color:var(--accent)}
+  .mdBody hr{border:none;border-top:1px solid var(--row);margin:.7em 0}
+  .mdBody .katex{font-size:1.02em}
+  .mdBody .katex-display{margin:.45em 0;overflow-x:auto;overflow-y:hidden}
+
   /* sidebar */
   #sidebar{width:300px;background:var(--panel);border-left:1px solid var(--border);overflow-y:auto;display:none}
   #sidebar.open{display:block}
@@ -92,7 +124,9 @@
   .sbItem .dot{width:10px;height:10px;border-radius:50%;flex:none}
   .sbItem .sbPage{font-size:11px;color:var(--muted)}
   .sbItem .sbText{font-size:12.5px;color:#6d635a;line-height:1.55;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-  .sbItem .sbNote{margin-top:7px;font-size:12px;color:#7a6248;background:var(--accent-soft);border-radius:8px;padding:6px 9px;line-height:1.55;white-space:pre-wrap}
+  .sbItem .sbNote{margin-top:7px;font-size:12px;color:#7a6248;background:var(--accent-soft);border-radius:8px;padding:8px 10px;line-height:1.55}
+  .sbItem .sbNote.mdBody{font-size:12.5px}
+  .sbItem .sbNote .katex{font-size:1em}
 
   /* selection popup & highlight popup */
   .popup{position:fixed;z-index:100;background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 40px rgba(70,55,35,.16);display:none}
@@ -100,11 +134,14 @@
   #selPopup.show{display:flex}
   .swatch{width:24px;height:24px;border-radius:50%;border:1px solid rgba(0,0,0,.08);cursor:pointer;padding:0;transition:transform .1s}
   .swatch:hover{transform:scale(1.15)}
-  #hlPopup{width:280px;padding:14px}
+  #hlPopup{width:380px;padding:14px;max-height:80vh;overflow:auto}
   #hlPopup.show{display:block}
   #hlPopup .row{display:flex;gap:7px;align-items:center;margin-bottom:10px}
-  #hlPopup textarea{min-height:70px;resize:vertical;font-size:13px}
-  #hlPopup .btns{display:flex;justify-content:space-between;margin-top:10px}
+  #hlPopup textarea{min-height:90px;resize:vertical;font-size:13px;font-family:ui-monospace,Menlo,monospace}
+  #hlPopup .previewLabel{font-size:10px;font-weight:600;letter-spacing:.1em;color:var(--muted);margin:12px 0 6px}
+  #hlPopup .preview{padding:10px 12px;background:#fff;border:1px solid var(--row);border-radius:8px;max-height:240px;overflow:auto;min-height:30px}
+  #hlPopup .preview.empty{color:#c4b6a0;font-size:12px;font-style:italic}
+  #hlPopup .btns{display:flex;justify-content:space-between;margin-top:12px}
   #hlPopup .delBtn{color:#b04848}
 
   /* modal */
@@ -184,6 +221,7 @@
     <span id="pageIndicator"></span>
     <button id="zoomOut" class="ghost">−</button>
     <button id="zoomIn" class="ghost">＋</button>
+    <button id="postitBtn" title="포스트잇 추가 (Esc로 취소)">＋ 포스트잇</button>
     <span id="saveStatus"></span>
     <button id="sidebarBtn">메모 목록</button>
   </div>
@@ -202,10 +240,12 @@
 <!-- selection popup -->
 <div id="selPopup" class="popup"></div>
 
-<!-- highlight edit popup -->
+<!-- highlight / post-it edit popup -->
 <div id="hlPopup" class="popup">
   <div class="row" id="hlColors"></div>
-  <textarea id="hlNote" placeholder="메모를 입력하세요…"></textarea>
+  <textarea id="hlNote" placeholder="마크다운 / 수식 입력 — 예: **굵게**, `code`, $E=mc^2$, $$\sum_{i=1}^n i$$"></textarea>
+  <div class="previewLabel">미리보기</div>
+  <div class="preview mdBody" id="hlPreview"></div>
   <div class="btns">
     <button class="ghost delBtn" id="hlDelete">삭제</button>
     <button class="primary" id="hlClose">완료</button>
@@ -246,10 +286,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 const $ = s => document.querySelector(s);
-const COLORS = [
-  getComputedStyle(document.documentElement).getPropertyValue('--hl-yellow').trim() || '#ffe066',
-  '#a8e6a1', '#ffb3c6', '#a5d8ff'
-];
+const COLORS = ['#fce8c4', '#ead2b0', '#e6c098', '#d4ad8c'];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -404,7 +441,7 @@ function renderTable() {
   const tb = $('#tableBody');
   tb.innerHTML = rows.map(p => `
     <tr data-id="${p.id}">
-      <td class="titleCell">${esc(p.title)}</td>
+      <td class="titleCell">${esc(p.title)}${!p.file ? ' <span class="placeholder" style="font-weight:400;font-size:11px">· PDF 없음</span>' : ''}</td>
       <td class="summaryCell">${p.summary ? esc(p.summary) : '<span class="placeholder">요약 없음 — ✎로 입력</span>'}</td>
       <td class="tagCell">${(p.tags && p.tags.length)
         ? p.tags.map(t => `<span class="tagChip" data-tag="${esc(t)}">${esc(t)}</span>`).join('')
@@ -415,7 +452,8 @@ function renderTable() {
       <td class="actionCell">
         ${p.bibtex ? `<button class="ghost copyBib" title="bibtex 복사">⧉</button>` : ''}
         <button class="ghost editRow" title="편집">✎</button>
-        <button class="ghost delRow" title="삭제">✕</button>
+        ${p.file ? `<button class="ghost delPdfRow" title="PDF만 삭제 (정보 유지)">PDF✕</button>` : ''}
+        <button class="ghost delRow" title="전체 삭제">✕</button>
       </td>
     </tr>`).join('');
   $('#emptyMsg').style.display = rows.length ? 'none' : 'block';
@@ -437,7 +475,9 @@ $('#tableBody').addEventListener('click', async e => {
     return toast('BibTeX 복사됨');
   }
   if (e.target.closest('.editRow')) return openEditModal(paper);
+  if (e.target.closest('.delPdfRow')) return deletePdfOnly(paper);
   if (e.target.closest('.delRow')) return deletePaper(paper);
+  if (!paper.file) return toast('PDF가 삭제된 항목입니다. 편집(✎)에서 정보를 확인하세요.');
   openViewer(paper);
 });
 
@@ -487,8 +527,10 @@ $('#mSave').onclick = async () => {
 async function deletePaper(p) {
   if (!confirm(`"${p.title}" 문서와 모든 형광펜/메모를 삭제할까요?`)) return;
   try {
-    const pdfSha = await ghFileSha(p.file);
-    if (pdfSha) await ghDelete(p.file, pdfSha, `delete ${p.title}`);
+    if (p.file) {
+      const pdfSha = await ghFileSha(p.file);
+      if (pdfSha) await ghDelete(p.file, pdfSha, `delete ${p.title}`);
+    }
     const annSha = await ghFileSha(`annotations/${p.id}.json`);
     if (annSha) await ghDelete(`annotations/${p.id}.json`, annSha, `delete annotations of ${p.title}`);
     library.papers = library.papers.filter(x => x.id !== p.id);
@@ -498,18 +540,35 @@ async function deletePaper(p) {
   } catch (e) { toast(`삭제 실패: ${e.message}`, true); }
 }
 
+async function deletePdfOnly(p) {
+  if (!p.file) return;
+  if (!confirm(`"${p.title}"의 PDF 파일과 형광펜/메모만 삭제할까요?\n제목·요약·태그·BibTeX는 그대로 유지됩니다.`)) return;
+  try {
+    const pdfSha = await ghFileSha(p.file);
+    if (pdfSha) await ghDelete(p.file, pdfSha, `delete pdf only: ${p.title}`);
+    const annSha = await ghFileSha(`annotations/${p.id}.json`);
+    if (annSha) await ghDelete(`annotations/${p.id}.json`, annSha, `delete annotations of ${p.title}`);
+    p.file = null;
+    await saveLibrary();
+    renderTable();
+    toast('PDF 삭제됨 (정보 유지)');
+  } catch (e) { toast(`삭제 실패: ${e.message}`, true); }
+}
+
 /* =====================================================================
    VIEWER
    ===================================================================== */
 const V = {                      // viewer state
   paper: null, pdf: null, pages: [], baseSizes: [], wraps: [],
-  scale: 1, anns: { highlights: [] }, annSha: null, observer: null,
+  scale: 1, anns: { highlights: [], postits: [] }, annSha: null, observer: null,
   saveTimer: null, dirty: false
 };
+let postitMode = false;
 
 async function openViewer(paper) {
-  V.paper = paper; V.scale = 1; V.anns = { highlights: [] }; V.annSha = null;
+  V.paper = paper; V.scale = 1; V.anns = { highlights: [], postits: [] }; V.annSha = null;
   V.pages = []; V.baseSizes = []; V.wraps = []; V.dirty = false;
+  setPostitMode(false);
   $('#vTitle').textContent = paper.title;
   $('#pagesContainer').innerHTML = '';
   $('#viewerLoading').style.display = 'block';
@@ -522,6 +581,8 @@ async function openViewer(paper) {
       ghGetJsonFile(`annotations/${paper.id}.json`)
     ]);
     if (ann) { V.anns = ann.data; V.annSha = ann.sha; }
+    if (!V.anns.highlights) V.anns.highlights = [];
+    if (!V.anns.postits) V.anns.postits = [];
     V.pdf = await pdfjsLib.getDocument({ data: buf }).promise;
     await buildPages();
     renderSidebar();
@@ -601,10 +662,14 @@ async function renderPage(i) {
   textLayer.style.width = viewport.width + 'px';
   textLayer.style.height = viewport.height + 'px';
 
+  const psLayer = document.createElement('div');
+  psLayer.className = 'psLayer';
+
   wrap.innerHTML = '';
   wrap.appendChild(canvas);
   wrap.appendChild(hlLayer);
   wrap.appendChild(textLayer);
+  wrap.appendChild(psLayer);
 
   const textContent = await page.getTextContent();
   await pdfjsLib.renderTextLayer({
@@ -612,6 +677,7 @@ async function renderPage(i) {
   }).promise;
 
   paintHighlights(i);
+  paintPostits(i);
   wrap.dataset.rendered = key;
   delete wrap.dataset.rendering;
 }
@@ -635,9 +701,24 @@ function paintHighlights(pageNo) {
     }
   }
 }
+function paintPostits(pageNo) {
+  const wrap = V.wraps[pageNo]; if (!wrap) return;
+  const layer = wrap.querySelector('.psLayer'); if (!layer) return;
+  layer.innerHTML = '';
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  for (const ps of (V.anns.postits || [])) {
+    if (ps.page !== pageNo) continue;
+    const d = document.createElement('div');
+    d.className = 'postit';
+    d.dataset.id = ps.id;
+    d.style.cssText = `left:${ps.x*W}px;top:${ps.y*H}px;background:${ps.color}`;
+    d.title = ps.note ? ps.note.slice(0, 80) : '포스트잇';
+    layer.appendChild(d);
+  }
+}
 function repaintAll() {
   for (let i = 1; i < V.wraps.length; i++)
-    if (V.wraps[i] && V.wraps[i].dataset.rendered) paintHighlights(i);
+    if (V.wraps[i] && V.wraps[i].dataset.rendered) { paintHighlights(i); paintPostits(i); }
 }
 
 /* ---------- zoom ---------- */
@@ -719,37 +800,121 @@ function createHighlightFromSelection(color) {
   openHlPopup(hl.id, { left: pr.left + x*pr.width, bottom: pr.top + (y+h)*pr.height });
 }
 
-/* ---------- highlight popup ---------- */
+/* ---------- markdown + math rendering ---------- */
+const KATEX_DELIMS = [
+  { left: '$$', right: '$$', display: true },
+  { left: '\\[', right: '\\]', display: true },
+  { left: '$', right: '$', display: false },
+  { left: '\\(', right: '\\)', display: false }
+];
+function renderMd(text, container) {
+  if (!text || !text.trim()) {
+    container.classList.add('empty');
+    container.textContent = '여기에 미리보기가 표시됩니다. **굵게**, `code`, $E=mc^2$, $$\\int_0^1 x\\,dx$$ 등 가능.';
+    return;
+  }
+  container.classList.remove('empty');
+  try {
+    container.innerHTML = window.marked
+      ? marked.parse(text, { breaks: true, gfm: true })
+      : esc(text).replace(/\n/g, '<br>');
+  } catch { container.textContent = text; }
+  if (window.renderMathInElement) {
+    try { renderMathInElement(container, { delimiters: KATEX_DELIMS, throwOnError: false }); }
+    catch {}
+  }
+}
+
+/* ---------- highlight / post-it popup ---------- */
 const hlPopup = $('#hlPopup');
-let activeHl = null;
+let activeHl = null, activePostit = null;
 $('#hlColors').innerHTML = COLORS.map(c =>
   `<button class="swatch" data-color="${c}" style="background:${c}"></button>`).join('');
 
-function openHlPopup(id, anchor) {
-  activeHl = V.anns.highlights.find(h => h.id === id);
-  if (!activeHl) return;
-  $('#hlNote').value = activeHl.note || '';
+function openPopup(anchor) {
   hlPopup.classList.add('show');
-  const pw = 280, ph = hlPopup.offsetHeight || 190;
+  const pw = 380, ph = hlPopup.offsetHeight || 320;
   let left = Math.max(8, Math.min(window.innerWidth - pw - 8, anchor.left));
   let top = anchor.bottom + 8;
-  if (top + ph > window.innerHeight - 8) top = Math.max(8, anchor.bottom - ph - 30);
+  if (top + ph > window.innerHeight - 8) top = Math.max(8, window.innerHeight - ph - 8);
   hlPopup.style.left = left + 'px';
   hlPopup.style.top = top + 'px';
+  renderMd($('#hlNote').value, $('#hlPreview'));
   $('#hlNote').focus();
 }
+function openHlPopup(id, anchor) {
+  activeHl = V.anns.highlights.find(h => h.id === id);
+  activePostit = null;
+  if (!activeHl) return;
+  $('#hlNote').value = activeHl.note || '';
+  openPopup(anchor);
+}
+function openPostitPopup(id, anchor) {
+  activePostit = (V.anns.postits || []).find(p => p.id === id);
+  activeHl = null;
+  if (!activePostit) return;
+  $('#hlNote').value = activePostit.note || '';
+  openPopup(anchor);
+}
+function closePopup() {
+  hlPopup.classList.remove('show');
+  activeHl = null; activePostit = null;
+  renderSidebar();
+}
+
+/* ---------- post-it placement ---------- */
+function setPostitMode(on) {
+  postitMode = !!on;
+  document.body.classList.toggle('postitMode', postitMode);
+  const btn = $('#postitBtn'); if (btn) btn.classList.toggle('active', postitMode);
+}
+$('#postitBtn').onclick = () => setPostitMode(!postitMode);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && postitMode) setPostitMode(false);
+});
+
+function placePostit(pageNo, x, y) {
+  const ps = {
+    id: uid(), color: COLORS[0], page: pageNo, x, y,
+    note: '', created: new Date().toISOString()
+  };
+  V.anns.postits.push(ps);
+  paintPostits(pageNo);
+  renderSidebar();
+  scheduleSave();
+  const wrap = V.wraps[pageNo], pr = wrap.getBoundingClientRect();
+  openPostitPopup(ps.id, { left: pr.left + x*pr.width, bottom: pr.top + y*pr.height + 18 });
+}
+
+/* ---------- click on page: placement, postit, highlight ---------- */
 $('#pagesContainer').addEventListener('click', e => {
-  // ignore clicks that end a text-selection drag
+  // 1) placement mode: drop a new post-it here
+  if (postitMode) {
+    const wrap = e.target.closest('.pageWrap');
+    if (!wrap) { setPostitMode(false); return; }
+    const pr = wrap.getBoundingClientRect();
+    placePostit(+wrap.dataset.page,
+      (e.clientX - pr.left) / pr.width,
+      (e.clientY - pr.top) / pr.height);
+    setPostitMode(false);
+    return;
+  }
+  // 2) click on existing post-it
+  const psEl = e.target.closest('.postit');
+  if (psEl) {
+    const r = psEl.getBoundingClientRect();
+    return openPostitPopup(psEl.dataset.id, { left: r.right, bottom: r.bottom });
+  }
+  // 3) ignore clicks that end a text-selection drag
   const sel = window.getSelection();
   if (sel && !sel.isCollapsed && sel.toString().trim()) return;
-  // direct hit on a .hl element (uncovered part)
+  // 4) direct hit on a .hl element (uncovered part)
   const el = e.target.closest('.hl');
   if (el) {
     const r = el.getBoundingClientRect();
     return openHlPopup(el.dataset.id, { left: r.left, bottom: r.bottom });
   }
-  // otherwise hit-test stored rects — the text layer sits above the
-  // highlight layer, so clicks on highlighted text land on text spans
+  // 5) hit-test stored highlight rects (text layer sits above hl layer)
   const wrap = e.target.closest('.pageWrap');
   if (!wrap) return;
   const pr = wrap.getBoundingClientRect();
@@ -764,54 +929,95 @@ $('#pagesContainer').addEventListener('click', e => {
           return openHlPopup(hl.id, { left: e.clientX - 20, bottom: e.clientY + 6 });
     }
 });
+
 $('#hlColors').addEventListener('click', e => {
-  const btn = e.target.closest('.swatch'); if (!btn || !activeHl) return;
-  activeHl.color = btn.dataset.color;
-  repaintAll(); renderSidebar(); scheduleSave();
+  const btn = e.target.closest('.swatch'); if (!btn) return;
+  if (activeHl) { activeHl.color = btn.dataset.color; repaintAll(); }
+  else if (activePostit) { activePostit.color = btn.dataset.color; paintPostits(activePostit.page); }
+  else return;
+  renderSidebar(); scheduleSave();
 });
 $('#hlNote').addEventListener('input', () => {
-  if (!activeHl) return;
-  activeHl.note = $('#hlNote').value;
+  const v = $('#hlNote').value;
+  if (activeHl) activeHl.note = v;
+  else if (activePostit) {
+    activePostit.note = v;
+    const el = document.querySelector(`.postit[data-id="${activePostit.id}"]`);
+    if (el) el.title = v ? v.slice(0, 80) : '포스트잇';
+  } else return;
+  renderMd(v, $('#hlPreview'));
   scheduleSave();
 });
 $('#hlNote').addEventListener('blur', renderSidebar);
-$('#hlClose').onclick = () => { hlPopup.classList.remove('show'); activeHl = null; renderSidebar(); };
+$('#hlClose').onclick = closePopup;
 $('#hlDelete').onclick = () => {
-  if (!activeHl) return;
-  V.anns.highlights = V.anns.highlights.filter(h => h.id !== activeHl.id);
-  hlPopup.classList.remove('show'); activeHl = null;
-  repaintAll(); renderSidebar(); scheduleSave();
+  if (activeHl) {
+    V.anns.highlights = V.anns.highlights.filter(h => h.id !== activeHl.id);
+    activeHl = null; repaintAll();
+  } else if (activePostit) {
+    const pg = activePostit.page;
+    V.anns.postits = V.anns.postits.filter(p => p.id !== activePostit.id);
+    activePostit = null; paintPostits(pg);
+  } else return;
+  hlPopup.classList.remove('show');
+  renderSidebar(); scheduleSave();
 };
 document.addEventListener('mousedown', e => {
   if (hlPopup.classList.contains('show') &&
-      !e.target.closest('#hlPopup') && !e.target.closest('.hl')) {
-    hlPopup.classList.remove('show'); activeHl = null; renderSidebar();
+      !e.target.closest('#hlPopup') && !e.target.closest('.hl') && !e.target.closest('.postit')) {
+    closePopup();
   }
 });
 
 /* ---------- sidebar ---------- */
 $('#sidebarBtn').onclick = () => $('#sidebar').classList.toggle('open');
 function renderSidebar() {
-  const sorted = [...V.anns.highlights].sort((a, b) => {
-    const pa = a.regions[0], pb = b.regions[0];
-    return pa.page - pb.page || pa.rects[0][1] - pb.rects[0][1];
+  const items = [
+    ...V.anns.highlights.map(h => ({
+      kind: 'hl', id: h.id, color: h.color,
+      page: h.regions[0].page, sortY: h.regions[0].rects[0][1],
+      text: h.text, note: (h.note && h.note.trim()) ? h.note : ''
+    })),
+    ...(V.anns.postits || []).map(p => ({
+      kind: 'ps', id: p.id, color: p.color,
+      page: p.page, sortY: p.y,
+      text: '', note: (p.note && p.note.trim()) ? p.note : ''
+    }))
+  ].sort((a, b) => a.page - b.page || a.sortY - b.sortY);
+
+  if (!items.length) {
+    $('#sbList').innerHTML = '<div style="padding:20px;color:var(--muted);font-size:13px;line-height:1.7">텍스트를 드래그하면 형광펜 색상 선택이 나타납니다.<br>「＋ 포스트잇」으로 페이지 어디든 메모를 붙일 수 있어요.<br><br>마크다운과 수식($x^2$) 입력이 가능합니다.</div>';
+    return;
+  }
+  $('#sbList').innerHTML = items.map(it => `
+    <div class="sbItem" data-id="${it.id}" data-kind="${it.kind}">
+      <div class="sbMeta">
+        <span class="dot" style="background:${it.color}"></span>
+        <span class="sbPage">p.${it.page}${it.kind === 'ps' ? ' · 포스트잇' : ''}</span>
+      </div>
+      ${it.text ? `<div class="sbText">${esc(it.text)}</div>` : ''}
+      ${it.note ? `<div class="sbNote mdBody"></div>` : ''}
+    </div>`).join('');
+  const noted = items.filter(x => x.note);
+  $('#sbList').querySelectorAll('.sbNote').forEach((el, i) => {
+    if (noted[i]) renderMd(noted[i].note, el);
   });
-  $('#sbList').innerHTML = sorted.length ? sorted.map(h => `
-    <div class="sbItem" data-id="${h.id}">
-      <div class="sbMeta"><span class="dot" style="background:${h.color}"></span>
-        <span class="sbPage">p.${h.regions[0].page}</span></div>
-      <div class="sbText">${esc(h.text)}</div>
-      ${h.note ? `<div class="sbNote">${esc(h.note)}</div>` : ''}
-    </div>`).join('')
-    : '<div style="padding:20px;color:var(--muted);font-size:13px;line-height:1.7">텍스트를 드래그하면 형광펜 색상 선택이 나타납니다.<br>형광펜을 클릭하면 메모를 달 수 있어요.</div>';
 }
 $('#sbList').addEventListener('click', e => {
   const item = e.target.closest('.sbItem'); if (!item) return;
-  const hl = V.anns.highlights.find(h => h.id === item.dataset.id); if (!hl) return;
-  const wrap = V.wraps[hl.regions[0].page];
+  const kind = item.dataset.kind, id = item.dataset.id;
+  let pageNo, selector;
+  if (kind === 'ps') {
+    const ps = V.anns.postits.find(p => p.id === id); if (!ps) return;
+    pageNo = ps.page; selector = `.postit[data-id="${id}"]`;
+  } else {
+    const hl = V.anns.highlights.find(h => h.id === id); if (!hl) return;
+    pageNo = hl.regions[0].page; selector = `.hl[data-id="${id}"]`;
+  }
+  const wrap = V.wraps[pageNo];
   wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
   setTimeout(() => {
-    wrap.querySelectorAll(`.hl[data-id="${hl.id}"]`).forEach(el => {
+    wrap.querySelectorAll(selector).forEach(el => {
       el.classList.add('flash');
       setTimeout(() => el.classList.remove('flash'), 1600);
     });
