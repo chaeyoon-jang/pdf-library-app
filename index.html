@@ -86,6 +86,28 @@
   .textLayer span,.textLayer br{color:transparent;position:absolute;white-space:pre;cursor:text;transform-origin:0% 0%}
   .textLayer ::selection{background:rgba(122,154,174,.38)}
 
+  /* drawings */
+  canvas.drawLayer{position:absolute;inset:0;pointer-events:none;z-index:2;width:100%;height:100%}
+  body.drawMode #pagesContainer .pageWrap{cursor:crosshair;touch-action:pan-y}
+  body.drawMode .textLayer{pointer-events:none;user-select:none}
+  body.drawMode .psLayer{pointer-events:none}
+  body.drawMode .hl{pointer-events:none}
+  body.drawMode.eraserTool #pagesContainer .pageWrap{cursor:cell}
+  #drawBtn.active{background:var(--ink);border-color:var(--ink);color:#fff}
+
+  /* drawing tools panel */
+  #drawPanel{position:fixed;top:54px;right:20px;z-index:90;background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 36px rgba(70,55,35,.16);padding:10px 12px;display:none;flex-direction:column;gap:10px;width:auto}
+  #drawPanel.show{display:flex}
+  #drawPanel .dpRow{display:flex;gap:7px;align-items:center}
+  #drawPanel .dpLabel{font-size:10px;font-weight:600;letter-spacing:.1em;color:var(--muted);width:42px}
+  #drawPanel .dpBtn{font-size:12px;padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:#fff;cursor:pointer}
+  #drawPanel .dpBtn.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+  #drawPanel .penSwatch{width:24px;height:24px;border-radius:50%;cursor:pointer;border:2px solid transparent;padding:0}
+  #drawPanel .penSwatch.active{border-color:var(--accent);box-shadow:0 0 0 2px #fff inset}
+  #drawPanel .widthBtn{width:30px;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid var(--border);background:#fff;border-radius:6px;padding:0}
+  #drawPanel .widthBtn.active{background:#f3eee2;border-color:#a89373}
+  #drawPanel .widthBtn span{display:block;background:#2a221a;border-radius:99px}
+
   /* post-its */
   .psLayer{position:absolute;inset:0;pointer-events:none;z-index:4}
   .postit{position:absolute;width:26px;height:26px;border-radius:3px;box-shadow:0 4px 12px rgba(70,55,35,.22),inset -4px -4px 0 rgba(70,55,35,.07);cursor:pointer;pointer-events:auto;transition:transform .14s;transform:translate(-13px,-13px)}
@@ -222,6 +244,7 @@
     <button id="zoomOut" class="ghost">−</button>
     <button id="zoomIn" class="ghost">＋</button>
     <button id="postitBtn" title="포스트잇 추가 (Esc로 취소)">＋ 포스트잇</button>
+    <button id="drawBtn" title="드로잉 (펜슬/마우스, 손가락=스크롤, Esc 종료)">✎ 드로잉</button>
     <span id="saveStatus"></span>
     <button id="sidebarBtn">메모 목록</button>
   </div>
@@ -234,6 +257,22 @@
       <div class="sbHead">형광펜 · 메모</div>
       <div id="sbList"></div>
     </div>
+  </div>
+</div>
+
+<!-- drawing tools panel -->
+<div id="drawPanel">
+  <div class="dpRow">
+    <span class="dpLabel">도구</span>
+    <button class="dpBtn toolBtn active" data-tool="pen">펜</button>
+    <button class="dpBtn toolBtn" data-tool="eraser">지우개</button>
+    <button class="dpBtn" id="undoBtn" title="되돌리기">↶</button>
+  </div>
+  <div class="dpRow" id="penColors">
+    <span class="dpLabel">색상</span>
+  </div>
+  <div class="dpRow" id="penWidths">
+    <span class="dpLabel">굵기</span>
   </div>
 </div>
 
@@ -560,15 +599,24 @@ async function deletePdfOnly(p) {
    ===================================================================== */
 const V = {                      // viewer state
   paper: null, pdf: null, pages: [], baseSizes: [], wraps: [],
-  scale: 1, anns: { highlights: [], postits: [] }, annSha: null, observer: null,
+  scale: 1, anns: { highlights: [], postits: [], drawings: [] }, annSha: null, observer: null,
   saveTimer: null, dirty: false
 };
 let postitMode = false;
+let drawMode = false, drawTool = 'pen', drawColor = '#2a221a', drawWidth = 0.0045;
+let currentStroke = null, drawingPage = 0;
+const PEN_COLORS = ['#2a221a', '#735239', '#a8534a', '#426478'];
+const PEN_WIDTHS = [
+  { key: 'thin', w: 0.0025, dot: 3 },
+  { key: 'mid',  w: 0.0045, dot: 5 },
+  { key: 'thick',w: 0.0075, dot: 8 }
+];
 
 async function openViewer(paper) {
-  V.paper = paper; V.scale = 1; V.anns = { highlights: [], postits: [] }; V.annSha = null;
+  V.paper = paper; V.scale = 1;
+  V.anns = { highlights: [], postits: [], drawings: [] }; V.annSha = null;
   V.pages = []; V.baseSizes = []; V.wraps = []; V.dirty = false;
-  setPostitMode(false);
+  setPostitMode(false); setDrawMode(false);
   $('#vTitle').textContent = paper.title;
   $('#pagesContainer').innerHTML = '';
   $('#viewerLoading').style.display = 'block';
@@ -583,6 +631,7 @@ async function openViewer(paper) {
     if (ann) { V.anns = ann.data; V.annSha = ann.sha; }
     if (!V.anns.highlights) V.anns.highlights = [];
     if (!V.anns.postits) V.anns.postits = [];
+    if (!V.anns.drawings) V.anns.drawings = [];
     V.pdf = await pdfjsLib.getDocument({ data: buf }).promise;
     await buildPages();
     renderSidebar();
@@ -665,9 +714,13 @@ async function renderPage(i) {
   const psLayer = document.createElement('div');
   psLayer.className = 'psLayer';
 
+  const drawLayer = document.createElement('canvas');
+  drawLayer.className = 'drawLayer';
+
   wrap.innerHTML = '';
   wrap.appendChild(canvas);
   wrap.appendChild(hlLayer);
+  wrap.appendChild(drawLayer);
   wrap.appendChild(textLayer);
   wrap.appendChild(psLayer);
 
@@ -678,6 +731,7 @@ async function renderPage(i) {
 
   paintHighlights(i);
   paintPostits(i);
+  paintDrawings(i);
   wrap.dataset.rendered = key;
   delete wrap.dataset.rendering;
 }
@@ -716,9 +770,75 @@ function paintPostits(pageNo) {
     layer.appendChild(d);
   }
 }
+function paintDrawings(pageNo) {
+  const wrap = V.wraps[pageNo]; if (!wrap) return;
+  const cv = wrap.querySelector('canvas.drawLayer'); if (!cv) return;
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  if (!W || !H) return;
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = Math.floor(W * dpr);
+  cv.height = Math.floor(H * dpr);
+  cv.style.width = W + 'px';
+  cv.style.height = H + 'px';
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (const d of (V.anns.drawings || [])) {
+    if (d.page !== pageNo) continue;
+    drawStroke(ctx, d, W, H);
+  }
+  if (currentStroke && currentStroke.page === pageNo) drawStroke(ctx, currentStroke, W, H);
+}
+
+function drawStroke(ctx, d, W, H) {
+  const pts = d.points; if (!pts || !pts.length) return;
+  ctx.strokeStyle = d.color;
+  ctx.fillStyle = d.color;
+  ctx.lineWidth = d.width * W;
+  if (pts.length === 1) {
+    ctx.beginPath();
+    ctx.arc(pts[0][0]*W, pts[0][1]*H, (d.width*W)/2, 0, Math.PI*2);
+    ctx.fill();
+    return;
+  }
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0]*W, pts[0][1]*H);
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [x1, y1] = pts[i], [x2, y2] = pts[i+1];
+    ctx.quadraticCurveTo(x1*W, y1*H, ((x1+x2)/2)*W, ((y1+y2)/2)*H);
+  }
+  const last = pts[pts.length - 1];
+  ctx.lineTo(last[0]*W, last[1]*H);
+  ctx.stroke();
+}
+
+// hit-test a stroke: returns true if (x,y) within tolerance of any segment
+function strokeHit(d, x, y, tol) {
+  const pts = d.points;
+  const r = (d.width / 2) + tol;
+  for (let i = 0; i < pts.length; i++) {
+    const [px, py] = pts[i];
+    if ((px - x) ** 2 + (py - y) ** 2 <= r * r) return true;
+    if (i > 0) {
+      const [ax, ay] = pts[i-1];
+      // distance from point to segment
+      const dx = px - ax, dy = py - ay;
+      const len2 = dx*dx + dy*dy;
+      if (len2 < 1e-10) continue;
+      let t = ((x - ax) * dx + (y - ay) * dy) / len2;
+      t = Math.max(0, Math.min(1, t));
+      const sx = ax + t*dx, sy = ay + t*dy;
+      if ((sx - x) ** 2 + (sy - y) ** 2 <= r * r) return true;
+    }
+  }
+  return false;
+}
+
 function repaintAll() {
   for (let i = 1; i < V.wraps.length; i++)
-    if (V.wraps[i] && V.wraps[i].dataset.rendered) { paintHighlights(i); paintPostits(i); }
+    if (V.wraps[i] && V.wraps[i].dataset.rendered) {
+      paintHighlights(i); paintPostits(i); paintDrawings(i);
+    }
 }
 
 /* ---------- zoom ---------- */
@@ -740,6 +860,7 @@ selPopup.addEventListener('mousedown', e => e.preventDefault());  // keep select
 
 document.addEventListener('mouseup', e => {
   if (!$('#viewerScreen').classList.contains('active')) return;
+  if (drawMode) return;
   if (e.target.closest('#selPopup') || e.target.closest('#hlPopup')) return;
   setTimeout(() => {
     const sel = window.getSelection();
@@ -865,13 +986,112 @@ function closePopup() {
 /* ---------- post-it placement ---------- */
 function setPostitMode(on) {
   postitMode = !!on;
+  if (postitMode && drawMode) setDrawMode(false);
   document.body.classList.toggle('postitMode', postitMode);
   const btn = $('#postitBtn'); if (btn) btn.classList.toggle('active', postitMode);
 }
 $('#postitBtn').onclick = () => setPostitMode(!postitMode);
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && postitMode) setPostitMode(false);
+  if (e.key === 'Escape') {
+    if (postitMode) setPostitMode(false);
+    if (drawMode) setDrawMode(false);
+  }
 });
+
+/* ---------- drawing ---------- */
+function setDrawMode(on) {
+  drawMode = !!on;
+  if (drawMode && postitMode) setPostitMode(false);
+  document.body.classList.toggle('drawMode', drawMode);
+  document.body.classList.toggle('eraserTool', drawMode && drawTool === 'eraser');
+  const btn = $('#drawBtn'); if (btn) btn.classList.toggle('active', drawMode);
+  $('#drawPanel').classList.toggle('show', drawMode);
+}
+$('#drawBtn').onclick = () => setDrawMode(!drawMode);
+
+// build pen color + width pickers
+(function initDrawTools() {
+  $('#penColors').insertAdjacentHTML('beforeend',
+    PEN_COLORS.map(c =>
+      `<button class="penSwatch${c===drawColor?' active':''}" data-color="${c}" style="background:${c}"></button>`
+    ).join(''));
+  $('#penWidths').insertAdjacentHTML('beforeend',
+    PEN_WIDTHS.map(p =>
+      `<button class="widthBtn${p.w===drawWidth?' active':''}" data-width="${p.w}">
+        <span style="width:${p.dot+8}px;height:${Math.max(2,p.dot/2+1)}px"></span>
+      </button>`
+    ).join(''));
+})();
+$('#penColors').addEventListener('click', e => {
+  const b = e.target.closest('.penSwatch'); if (!b) return;
+  drawColor = b.dataset.color;
+  $('#penColors').querySelectorAll('.penSwatch').forEach(x => x.classList.toggle('active', x === b));
+});
+$('#penWidths').addEventListener('click', e => {
+  const b = e.target.closest('.widthBtn'); if (!b) return;
+  drawWidth = +b.dataset.width;
+  $('#penWidths').querySelectorAll('.widthBtn').forEach(x => x.classList.toggle('active', x === b));
+});
+$('#drawPanel').addEventListener('click', e => {
+  const b = e.target.closest('.toolBtn'); if (!b) return;
+  drawTool = b.dataset.tool;
+  $('#drawPanel').querySelectorAll('.toolBtn').forEach(x => x.classList.toggle('active', x === b));
+  document.body.classList.toggle('eraserTool', drawMode && drawTool === 'eraser');
+});
+$('#undoBtn').onclick = () => {
+  if (!V.anns.drawings.length) return;
+  const last = V.anns.drawings.pop();
+  paintDrawings(last.page);
+  renderSidebar(); scheduleSave();
+};
+
+// pointer-based drawing on pages
+$('#pagesContainer').addEventListener('pointerdown', e => {
+  if (!drawMode) return;
+  if (e.pointerType === 'touch') return;       // finger → let it scroll
+  const wrap = e.target.closest('.pageWrap'); if (!wrap) return;
+  const pr = wrap.getBoundingClientRect();
+  const x = (e.clientX - pr.left) / pr.width;
+  const y = (e.clientY - pr.top) / pr.height;
+  const pageNo = +wrap.dataset.page;
+  if (drawTool === 'eraser') {
+    const before = V.anns.drawings.length;
+    V.anns.drawings = V.anns.drawings.filter(d => !(d.page === pageNo && strokeHit(d, x, y, 0.005)));
+    if (V.anns.drawings.length !== before) { paintDrawings(pageNo); renderSidebar(); scheduleSave(); }
+    return;
+  }
+  e.preventDefault();
+  try { wrap.setPointerCapture(e.pointerId); } catch {}
+  drawingPage = pageNo;
+  currentStroke = {
+    id: uid(), page: pageNo, color: drawColor, width: drawWidth,
+    points: [[+x.toFixed(4), +y.toFixed(4)]], created: new Date().toISOString()
+  };
+  paintDrawings(pageNo);
+});
+$('#pagesContainer').addEventListener('pointermove', e => {
+  if (!currentStroke) return;
+  if (e.pointerType === 'touch') return;
+  const wrap = V.wraps[drawingPage]; if (!wrap) return;
+  const pr = wrap.getBoundingClientRect();
+  const x = (e.clientX - pr.left) / pr.width;
+  const y = (e.clientY - pr.top) / pr.height;
+  const last = currentStroke.points[currentStroke.points.length - 1];
+  if (Math.hypot(x - last[0], y - last[1]) < 0.0015) return;
+  currentStroke.points.push([+x.toFixed(4), +y.toFixed(4)]);
+  paintDrawings(drawingPage);
+});
+function finishStroke() {
+  if (!currentStroke) return;
+  if (currentStroke.points.length >= 1) V.anns.drawings.push(currentStroke);
+  const pg = currentStroke.page;
+  currentStroke = null;
+  paintDrawings(pg);
+  scheduleSave();
+}
+$('#pagesContainer').addEventListener('pointerup', finishStroke);
+$('#pagesContainer').addEventListener('pointercancel', finishStroke);
+$('#pagesContainer').addEventListener('pointerleave', finishStroke);
 
 function placePostit(pageNo, x, y) {
   const ps = {
@@ -888,6 +1108,7 @@ function placePostit(pageNo, x, y) {
 
 /* ---------- click on page: placement, postit, highlight ---------- */
 $('#pagesContainer').addEventListener('click', e => {
+  if (drawMode) return;                          // drawing handled via pointer events
   // 1) placement mode: drop a new post-it here
   if (postitMode) {
     const wrap = e.target.closest('.pageWrap');
@@ -985,11 +1206,13 @@ function renderSidebar() {
     }))
   ].sort((a, b) => a.page - b.page || a.sortY - b.sortY);
 
+  const drawCount = (V.anns.drawings || []).length;
+  const drawNote = drawCount ? `<div style="padding:10px 18px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--row)">✎ 드로잉 ${drawCount}개</div>` : '';
   if (!items.length) {
-    $('#sbList').innerHTML = '<div style="padding:20px;color:var(--muted);font-size:13px;line-height:1.7">텍스트를 드래그하면 형광펜 색상 선택이 나타납니다.<br>「＋ 포스트잇」으로 페이지 어디든 메모를 붙일 수 있어요.<br><br>마크다운과 수식($x^2$) 입력이 가능합니다.</div>';
+    $('#sbList').innerHTML = drawNote + '<div style="padding:20px;color:var(--muted);font-size:13px;line-height:1.7">텍스트를 드래그하면 형광펜 색상 선택이 나타납니다.<br>「＋ 포스트잇」으로 페이지 어디든 메모를 붙일 수 있어요.<br>「✎ 드로잉」으로 펜슬·마우스로 직접 그릴 수 있어요.<br><br>마크다운과 수식($x^2$) 입력이 가능합니다.</div>';
     return;
   }
-  $('#sbList').innerHTML = items.map(it => `
+  $('#sbList').innerHTML = drawNote + items.map(it => `
     <div class="sbItem" data-id="${it.id}" data-kind="${it.kind}">
       <div class="sbMeta">
         <span class="dot" style="background:${it.color}"></span>
