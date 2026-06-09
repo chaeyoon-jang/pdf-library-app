@@ -64,11 +64,17 @@ td.tagCell{max-width:200px}
 #pageIndicator{font-size:12px;color:var(--muted)}
 .vBody{flex:1;display:flex;overflow:hidden}
 #viewerMain{flex:1;overflow:auto;padding:28px 0;position:relative}
-.pageWrap{position:relative;margin:0 auto 20px;background:#fff;box-shadow:0 4px 26px rgba(70,55,35,.13);border-radius:2px}
+.pageWrap{position:relative;margin:0 auto 20px;background:#fff;box-shadow:0 4px 26px rgba(70,55,35,.13);border-radius:2px;touch-action:pan-y;isolation:isolate}
 .pageWrap canvas{display:block;position:absolute;top:0;left:0}
-.hlLayer{position:absolute;inset:0}
-.hlLayer .hl{position:absolute;mix-blend-mode:multiply;opacity:.55;border-radius:1px;pointer-events:auto;cursor:pointer}
-.hlLayer .hl.flash{outline:2px solid var(--accent)}
+/* Highlights: opacity-only blend (no mix-blend-mode). Earlier we used
+   `mix-blend-mode: multiply` for a marker-on-paper look, but combining
+   that with the drawing canvas above broke compositing in iOS Safari
+   and the highlights disappeared. opacity blends reliably everywhere. */
+.hlLayer{position:absolute;inset:0;z-index:1}
+.hlLayer .hl{position:absolute;opacity:.5;border-radius:2px;pointer-events:auto;cursor:pointer}
+.hlLayer .hl.flash{outline:2px solid var(--accent);opacity:.7}
+/* keep the viewport pannable but disable browser native pinch — js/viewer.js handles pinch */
+#viewerMain{touch-action:pan-y}
 .textLayer{position:absolute;inset:0;overflow:hidden;line-height:1;z-index:3;transform-origin:0 0;caret-color:CanvasText}
 .textLayer span,.textLayer br{color:transparent;position:absolute;white-space:pre;cursor:text;transform-origin:0% 0%}
 .textLayer ::selection{background:rgba(122,154,174,.38)}

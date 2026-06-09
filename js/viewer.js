@@ -168,6 +168,58 @@ function setZoom(f) {
 $('#zoomIn').onclick = () => setZoom(1.2);
 $('#zoomOut').onclick = () => setZoom(1 / 1.2);
 
+/* ---------- pinch zoom (2 fingers) ----------
+   Apply a CSS transform on #pagesContainer for live feedback during
+   the gesture, then on touchend re-layout at the new scale. We only
+   activate when BOTH touches are fingers (not stylus) so an Apple
+   Pencil drawing isn't accidentally treated as a pinch. */
+let pinch = null;
+
+function pinchDistance(touches) {
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.hypot(dx, dy);
+}
+
+$('#viewerMain').addEventListener('touchstart', e => {
+  if (e.touches.length !== 2) return;
+  const t1 = e.touches[0], t2 = e.touches[1];
+  // Skip if either touch is the Apple Pencil — that's a draw gesture.
+  if (t1.touchType === 'stylus' || t2.touchType === 'stylus') return;
+  if (typeof abortStroke === 'function') abortStroke();
+  e.preventDefault();
+  const main = $('#viewerMain'), mr = main.getBoundingClientRect();
+  const cx = (t1.clientX + t2.clientX) / 2;
+  const cy = (t1.clientY + t2.clientY) / 2;
+  pinch = {
+    startDist: pinchDistance(e.touches),
+    ratio: 1,
+    // Anchor the transform at the gesture's midpoint inside #pagesContainer.
+    ox: cx - mr.left + main.scrollLeft,
+    oy: cy - mr.top + main.scrollTop
+  };
+  $('#pagesContainer').style.transformOrigin = `${pinch.ox}px ${pinch.oy}px`;
+}, { passive: false });
+
+$('#viewerMain').addEventListener('touchmove', e => {
+  if (!pinch || e.touches.length !== 2) return;
+  e.preventDefault();
+  pinch.ratio = pinchDistance(e.touches) / pinch.startDist;
+  $('#pagesContainer').style.transform = `scale(${pinch.ratio})`;
+}, { passive: false });
+
+function endPinch() {
+  if (!pinch) return;
+  const ratio = pinch.ratio;
+  const container = $('#pagesContainer');
+  container.style.transform = '';
+  container.style.transformOrigin = '';
+  pinch = null;
+  if (ratio && Math.abs(ratio - 1) > 0.01) setZoom(ratio);
+}
+$('#viewerMain').addEventListener('touchend',    endPinch);
+$('#viewerMain').addEventListener('touchcancel', endPinch);
+
 /* ---------- annotation persistence ---------- */
 function scheduleSave() {
   V.dirty = true;
