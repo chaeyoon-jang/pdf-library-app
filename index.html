@@ -112,10 +112,12 @@
 
 <!-- highlight / post-it edit popup -->
 <div id="hlPopup" class="popup">
-  <div class="row" id="hlColors"></div>
-  <textarea id="hlNote" placeholder="마크다운 / 수식 입력 — 예: **굵게**, `code`, $E=mc^2$, $$\sum_{i=1}^n i$$"></textarea>
-  <div class="previewLabel">미리보기</div>
-  <div class="preview mdBody" id="hlPreview"></div>
+  <div class="popupBody">
+    <div class="row" id="hlColors"></div>
+    <textarea id="hlNote" placeholder="마크다운 / 수식 입력 — 예: **굵게**, `code`, $E=mc^2$, $$\sum_{i=1}^n i$$"></textarea>
+    <div class="previewLabel">미리보기</div>
+    <div class="preview mdBody" id="hlPreview"></div>
+  </div>
   <div class="btns">
     <button class="ghost delBtn" id="hlDelete">삭제</button>
     <button class="primary" id="hlClose">완료</button>

@@ -21,8 +21,29 @@ function paintPostits(pageNo) {
     d.dataset.id = ps.id;
     d.style.cssText = `left:${ps.x*W}px;top:${ps.y*H}px;background:${ps.color}`;
     d.title = ps.note ? ps.note.slice(0, 80) : '포스트잇';
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'psDelete';
+    del.textContent = '×';
+    del.setAttribute('aria-label', '포스트잇 삭제');
+    d.appendChild(del);
     layer.appendChild(d);
   }
+}
+
+function deletePostitById(id) {
+  const ps = (V.anns.postits || []).find(p => p.id === id);
+  if (!ps) return;
+  const pg = ps.page;
+  V.anns.postits = V.anns.postits.filter(p => p.id !== id);
+  // close popup if it happened to be editing this same post-it
+  if (typeof activePostit !== 'undefined' && activePostit && activePostit.id === id) {
+    hlPopup.classList.remove('show');
+    activePostit = null;
+  }
+  paintPostits(pg);
+  renderSidebar();
+  scheduleSave();
 }
 
 function setPostitMode(on) {
@@ -50,6 +71,15 @@ function placePostit(pageNo, x, y) {
 /* ---------- click on page: dispatcher for postit + highlight ---------- */
 $('#pagesContainer').addEventListener('click', e => {
   if (drawMode) return;                          // drawing has its own pointer flow
+
+  // 0) tap the × badge on a post-it → delete immediately
+  const delBtn = e.target.closest('.psDelete');
+  if (delBtn) {
+    e.stopPropagation();
+    const ps = delBtn.closest('.postit');
+    if (ps) deletePostitById(ps.dataset.id);
+    return;
+  }
   // 1) placement mode → drop a new post-it
   if (postitMode) {
     const wrap = e.target.closest('.pageWrap');
@@ -61,7 +91,7 @@ $('#pagesContainer').addEventListener('click', e => {
     setPostitMode(false);
     return;
   }
-  // 2) click on an existing post-it
+  // 2) click on an existing post-it (body, not the × badge)
   const psEl = e.target.closest('.postit');
   if (psEl) {
     const r = psEl.getBoundingClientRect();

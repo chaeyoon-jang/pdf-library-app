@@ -15,14 +15,19 @@ $('#hlColors').innerHTML = COLORS.map(c =>
 
 function openPopup(anchor) {
   hlPopup.classList.add('show');
-  const pw = 380, ph = hlPopup.offsetHeight || 320;
+  // Measure after the flex layout takes effect — offsetHeight is now real.
+  const pw = hlPopup.offsetWidth  || 380;
+  const ph = hlPopup.offsetHeight || 320;
   let left = Math.max(8, Math.min(window.innerWidth - pw - 8, anchor.left));
   let top = anchor.bottom + 8;
   if (top + ph > window.innerHeight - 8) top = Math.max(8, window.innerHeight - ph - 8);
   hlPopup.style.left = left + 'px';
   hlPopup.style.top = top + 'px';
   renderMd($('#hlNote').value, $('#hlPreview'));
-  $('#hlNote').focus();
+  // No auto-focus on touch devices: the iPad keyboard would slide up and
+  // steal the next tap (so the user's tap on 삭제/완료 dismisses the keyboard
+  // instead of clicking the button). The user can tap the textarea to type.
+  if (!matchMedia('(hover: none)').matches) $('#hlNote').focus();
 }
 
 function openHlPopup(id, anchor) {

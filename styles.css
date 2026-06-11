@@ -107,9 +107,16 @@ body.drawMode.eraserTool #pagesContainer .pageWrap{cursor:cell}
 /* post-its */
 .psLayer{position:absolute;inset:0;pointer-events:none;z-index:4}
 .postit{position:absolute;width:26px;height:26px;border-radius:3px;box-shadow:0 4px 12px rgba(70,55,35,.22),inset -4px -4px 0 rgba(70,55,35,.07);cursor:pointer;pointer-events:auto;transition:transform .14s;transform:translate(-13px,-13px)}
-.postit::after{content:'';position:absolute;left:5px;right:5px;top:6px;bottom:6px;background:repeating-linear-gradient(to bottom,rgba(70,55,35,.3) 0 1.5px,transparent 1.5px 5px)}
+.postit::after{content:'';position:absolute;left:5px;right:5px;top:6px;bottom:6px;background:repeating-linear-gradient(to bottom,rgba(70,55,35,.3) 0 1.5px,transparent 1.5px 5px);pointer-events:none}
 .postit:hover{transform:translate(-13px,-13px) scale(1.2) rotate(-4deg)}
 .postit.flash{outline:2px solid var(--accent);outline-offset:2px}
+.postit .psDelete{position:absolute;top:-8px;right:-8px;width:20px;height:20px;border-radius:50%;background:#fff;border:1px solid var(--border);color:#b04848;font-size:15px;font-weight:600;line-height:1;padding:0;cursor:pointer;box-shadow:0 2px 6px rgba(70,55,35,.22);display:flex;align-items:center;justify-content:center}
+.postit .psDelete:hover{background:#fbe8e8}
+/* on hover-capable devices keep the badge subtle; on touch (iPad) always show */
+@media (hover:hover) and (pointer:fine){
+  .postit .psDelete{opacity:0;transition:opacity .15s}
+  .postit:hover .psDelete{opacity:1}
+}
 body.postitMode #pagesContainer .pageWrap{cursor:crosshair}
 body.postitMode .textLayer{pointer-events:none;user-select:none}
 #postitBtn.active{background:var(--ink);border-color:var(--ink);color:#fff}
@@ -152,15 +159,21 @@ body.postitMode .textLayer{pointer-events:none;user-select:none}
 #selPopup.show{display:flex}
 .swatch{width:24px;height:24px;border-radius:50%;border:1px solid rgba(0,0,0,.08);cursor:pointer;padding:0;transition:transform .1s}
 .swatch:hover{transform:scale(1.15)}
-#hlPopup{width:380px;padding:14px;max-height:80vh;overflow:auto}
-#hlPopup.show{display:block}
+/* The popup is a flex column with a scrollable body and a sticky action
+   bar at the bottom — that way the 삭제/완료 buttons are always reachable
+   even when the iPad keyboard shrinks the viewport. */
+#hlPopup{width:380px;max-height:80vh;padding:0;overflow:hidden;touch-action:manipulation}
+#hlPopup.show{display:flex;flex-direction:column}
+#hlPopup .popupBody{flex:1 1 auto;min-height:0;overflow:auto;padding:14px}
 #hlPopup .row{display:flex;gap:7px;align-items:center;margin-bottom:10px}
 #hlPopup textarea{min-height:90px;resize:vertical;font-size:13px;font-family:ui-monospace,Menlo,monospace}
 #hlPopup .previewLabel{font-size:10px;font-weight:600;letter-spacing:.1em;color:var(--muted);margin:12px 0 6px}
-#hlPopup .preview{padding:10px 12px;background:#fff;border:1px solid var(--row);border-radius:8px;max-height:240px;overflow:auto;min-height:30px}
+#hlPopup .preview{padding:10px 12px;background:#fff;border:1px solid var(--row);border-radius:8px;max-height:200px;overflow:auto;min-height:30px}
 #hlPopup .preview.empty{color:#c4b6a0;font-size:12px;font-style:italic}
-#hlPopup .btns{display:flex;justify-content:space-between;margin-top:12px}
-#hlPopup .delBtn{color:#b04848}
+#hlPopup .btns{flex:0 0 auto;display:flex;justify-content:space-between;gap:8px;padding:10px 14px;border-top:1px solid var(--row);background:var(--panel)}
+#hlPopup .btns button{min-width:84px;padding:10px 16px;font-size:14px;touch-action:manipulation}
+#hlPopup .delBtn{color:#b04848;border-color:var(--border);background:#fff}
+#hlPopup .delBtn:hover{background:#fbe8e8}
 
 /* modal */
 .modalBack{position:fixed;inset:0;background:rgba(50,40,28,.32);backdrop-filter:blur(3px);z-index:200;display:none;align-items:center;justify-content:center}
